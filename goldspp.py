@@ -1,4 +1,3 @@
-# scraper.py
 import requests
 from bs4 import BeautifulSoup
 import os
@@ -42,8 +41,6 @@ def scrape_gold_price():
         return None, None
 
     soup = BeautifulSoup(resp.content, "html.parser")
-
-    # 這裡依你實際的 DOM 結構調整，示意而已
     tables = soup.find_all("table")
     if not tables:
         logging.warning("找不到任何 table，可能頁面結構變更")
@@ -51,8 +48,7 @@ def scrape_gold_price():
 
     prices = {}
     lines = []
-
-    lines.append(f"<b>📊 王鼎貴金屬價格更新</b>")
+    lines.append("<b>📊 王鼎貴金屬價格更新</b>")
     lines.append(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     lines.append("━━━━━━━━━━━━━━━━")
 
@@ -63,11 +59,9 @@ def scrape_gold_price():
                 name = tds[0].get_text(strip=True)
                 sell = tds[1].get_text(strip=True)
                 buy = tds[2].get_text(strip=True)
-
                 if not name or "出" in name or "入" in name:
                     continue
-
-                key = name  # 當作唯一識別
+                key = name
                 prices[key] = {"sell": sell, "buy": buy}
 
     if not prices:
@@ -76,7 +70,7 @@ def scrape_gold_price():
 
     return prices, "\n".join(lines)
 
-def build_changed_message(old: dict, new: dict, header: str) -> str | None:
+def build_changed_message(old: dict, new: dict, header: str):
     changed_lines = [header, ""]
     changed = False
 
@@ -113,7 +107,7 @@ def send_telegram_message(text: str):
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": "HTML"   # 使用 HTML 格式化
+        "parse_mode": "HTML"
     }
 
     try:
@@ -125,10 +119,8 @@ def send_telegram_message(text: str):
 
 def main():
     last_state = load_last_state()
-
     new_prices, header = scrape_gold_price()
     if new_prices is None:
-        # 嚴重錯誤時還是要在 log 中留下紀錄，GitHub Actions 可設成失敗
         raise SystemExit("抓取失敗")
 
     msg = build_changed_message(
