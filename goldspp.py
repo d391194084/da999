@@ -3,7 +3,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
-TG_TOKEN = os.environ["7341790018:AAEW2QfAURsho0JM_WRwiR2gSa1dQb0OV3E"]          # GitHub Actions Secret
+TG_TOKEN = os.environ["TG_TOKEN"]       # GitHub Actions Secret
 CHAT_ID = "8272362300"
 PRICE_URL = "https://wdpm.com.tw"         # 首頁含你截圖那塊 [web:32]
 
@@ -56,3 +56,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
