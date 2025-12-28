@@ -50,7 +50,8 @@ def scrape_gold_price():
     prices = {}
     lines = []
     lines.append("<b>📊 王鼎貴金屬價格更新</b>")
-    lines.append(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    taipei_now = datetime.now(ZoneInfo("Asia/Taipei"))
+    lines.append(f"⏰ {taipei_now.strftime('%Y-%m-%d %H:%M')}")
     lines.append("━━━━━━━━━━━━━━━━")
 
     for table in tables:
@@ -133,11 +134,13 @@ def main():
     if msg:
         send_telegram_message(msg)
         last_state["prices"] = new_prices
-        last_state["last_sent_at"] = datetime.now().isoformat()
+        taipei_now = datetime.now(ZoneInfo("Asia/Taipei"))
+        last_state["last_sent_at"] = taipei_now.isoformat()
         save_state(last_state)
     else:
         logging.info("價格無變動，本次不發送通知")
 
 if __name__ == "__main__":
     main()
+
 
