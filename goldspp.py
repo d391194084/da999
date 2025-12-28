@@ -1,8 +1,9 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import requests
 from bs4 import BeautifulSoup
 import os
 import json
-from datetime import datetime
 import logging
 from pathlib import Path
 
@@ -139,3 +140,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
