@@ -1,0 +1,46 @@
+name: Gold Price Notification
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # 每小時執行一次
+  workflow_dispatch:      # 允許手動執行
+
+jobs:
+  scrape-and-notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    # 賦予 Action 寫入權限，才能更新 last_price.json
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Run goldspp
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python goldspp.py
+
+      - name: Commit and push if changed
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 檢查 last_price.json 是否有變動
+          if [ -f last_price.json ]; then
+            git add last_price.json
+            # 只有在檔案內容真的有改時才 commit，避免 push 失敗
+            git commit -m "Update gold price state [skip ci]" || echo "No changes to commit"
+            git push
+          fi
