@@ -27,22 +27,20 @@ def fetch_prices():
         soup = BeautifulSoup(resp.content, "html.parser")
         prices = {}
         
-        # 抓取表格中所有的行 (tr)
         rows = soup.find_all("tr")
         for row in rows:
-            tds = [td.get_text(strip=True) for td in row.find_all("td")]
+            # 去除隱形空白字元與前後空格
+            tds = [td.get_text(strip=True).replace('\xa0', ' ') for td in row.find_all("td")]
             
-            # 跳過空行或欄位不足的行
             if len(tds) < 2:
                 continue
             
             name = tds[0]
             
-            # 過濾掉表格內部的說明文字列，避免混淆
+            # 過濾掉表格內部的標題/說明文字
             if "出 / 入" in name or "出 / 每" in name or name == "品名":
                 continue
             
-            # 判斷是三欄格式 (買賣價) 還是兩欄格式 (單一價值)
             if len(tds) >= 3:
                 prices[name] = {"sell": tds[1], "buy": tds[2]}
             else:
@@ -57,7 +55,7 @@ def send_telegram_message(text: str):
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
     if not token or not chat_id:
-        logging.error("錯誤: 找不到 TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID 環境變數")
+        logging.error("錯誤: 缺少 Telegram 環境變數設定")
         return
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -69,15 +67,14 @@ def send_telegram_message(text: str):
     }
     try:
         requests.post(url, data=payload, timeout=10).raise_for_status()
-        logging.info("Telegram 訊息已成功送出")
+        logging.info("Telegram 訊息已送出")
     except Exception as e:
         logging.error(f"Telegram 發送失敗: {e}")
 
 def main():
-    # 取得台灣時間 (UTC+8)
     tw_now = (datetime.utcnow() + timedelta(hours=8)).strftime('%Y-%m-%d %H:%M')
     
-    # 1. 讀取舊資料用於比對
+    # 1. 讀取舊資料
     old_prices = {}
     if os.path.exists(DATA_FILE):
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -86,58 +83,53 @@ def main():
             except: 
                 old_prices = {}
 
-    # 2. 抓取最新資料
+    # 2. 抓取新資料
     new_prices = fetch_prices()
     if not new_prices:
         return
 
-    # 3. 建立訊息內容
-    msg_lines = [
-        f"<b>📊 王鼎貴金屬價格更新</b>",
-        f"⏰ {tw_now}",
-        "━━━━━━━━━━━━━━━━"
-    ]
+    # 3. 準備變量
+    msg_lines = [f"<b>📊 王鼎貴金屬價格更新</b>", f"⏰ {tw_now}", "━━━━━━━━━━━━━━━━"]
+    category_icons = {"黃金": "🟡", "白金": "⚪️", "白銀": "🥈", "昨晚紐約收盤：": "🌎"}
+    
+    has_any_change = False  # 用來記錄是否有任何一項發生變動
 
-    # 定義大分類的圖示
-    category_icons = {
-        "黃金": "🟡",
-        "白金": "⚪️",
-        "白銀": "🥈",
-        "昨晚紐約收盤：": "🌎"
-    }
-
+    # 4. 比對與排版
     for name, cur in new_prices.items():
         prev = old_prices.get(name)
-        # 判斷是否變動 (且確保不是第一次執行)
+        
+        # 判定變動邏輯：
+        # 如果舊資料不存在，視為第一次執行 (不標火)
+        # 如果舊資料存在且與新資料不同，則視為變動 (標火)
         is_changed = bool(old_prices) and (prev != cur)
+        
+        if is_changed:
+            has_any_change = True # 只要有一項變動，就設為 True
+            
         tag = " 🔥" if is_changed else ""
 
-        # A. 處理大分類標題 (判斷特徵：sell 欄位包含 "出" 字眼或為空)
+        # 分類標題處理
         if "sell" in cur and (("出" in cur['sell']) or not cur['sell']):
             icon = category_icons.get(name, "📌")
-            msg_lines.append(f"\n{icon} <u><b>{name}</b></u>")
+            msg_lines.append(f"\n{icon} <b><u>{name}</u></b>")
             continue
         
-        # B. 處理一般價格項目
+        # 一般商品處理
         if "sell" in cur:
-            # 買賣報價格式
-            sell_val = cur['sell'] if cur['sell'] else "--"
-            buy_val = cur['buy'] if cur['buy'] else "--"
-            msg_lines.append(f"• <b>{name}</b>{tag}\n  出: <code>{sell_val}</code> | 入: <code>{buy_val}</code>")
+            msg_lines.append(f"• <b>{name}</b>{tag}\n  出: <code>{cur['sell']}</code> | 入: <code>{cur['buy']}</code>")
         else:
-            # 單一數值格式 (如：收盤價)
-            val = cur.get('val', '--')
-            icon = category_icons.get(name, "•")
-            msg_lines.append(f"{icon} <b>{name}</b>{tag}\n  價格: <code>{val}</code>")
+            msg_lines.append(f"• <b>{name}</b>{tag}\n  價格: <code>{cur.get('val', '--')}</code>")
 
-    # 4. 發送訊息 (不論有無變動都會發送)
-    send_telegram_message("\n".join(msg_lines))
-    
-    # 5. 更新本地 JSON 資料庫，供下次比對
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(new_prices, f, ensure_ascii=False, indent=2)
-    
-    logging.info("流程執行完畢")
+    # 5. 判斷是否發送
+    # 如果是第一次執行 (old_prices 為空)，或者偵測到變動 (has_any_change 為 True) 則發送
+    if not old_prices or has_any_change:
+        send_telegram_message("\n".join(msg_lines))
+        # 發送後存檔，供下次比對
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(new_prices, f, ensure_ascii=False, indent=2)
+        logging.info("偵測到變動或首次運行，訊息已發送並更新存檔。")
+    else:
+        logging.info("價格無變動，跳過本次發送。")
 
 if __name__ == "__main__":
     main()
